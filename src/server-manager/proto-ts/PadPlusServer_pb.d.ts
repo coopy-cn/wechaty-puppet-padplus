@@ -37,6 +37,12 @@ export class RequestObject extends jspb.Message {
     setParams(value: string): void;
 
 
+    hasTraceid(): boolean;
+    clearTraceid(): void;
+    getTraceid(): string | undefined;
+    setTraceid(value: string): void;
+
+
     serializeBinary(): Uint8Array;
     toObject(includeInstance?: boolean): RequestObject.AsObject;
     static toObject(includeInstance: boolean, msg: RequestObject): RequestObject.AsObject;
@@ -54,6 +60,7 @@ export namespace RequestObject {
         token?: string,
         apitype?: ApiType,
         params?: string,
+        traceid?: string,
     }
 }
 
@@ -131,6 +138,12 @@ export class StreamResponse extends jspb.Message {
     setResponsetype(value: ResponseType): void;
 
 
+    hasTraceid(): boolean;
+    clearTraceid(): void;
+    getTraceid(): string | undefined;
+    setTraceid(value: string): void;
+
+
     serializeBinary(): Uint8Array;
     toObject(includeInstance?: boolean): StreamResponse.AsObject;
     static toObject(includeInstance: boolean, msg: StreamResponse): StreamResponse.AsObject;
@@ -147,6 +160,7 @@ export namespace StreamResponse {
         requestid?: string,
         data?: string,
         responsetype?: ResponseType,
+        traceid?: string,
     }
 }
 
@@ -157,6 +171,7 @@ export enum ApiType {
     INIT = 3,
     STOP = 4,
     CLOSE = 5,
+    HEARTBEAT = 6,
     GET_CONTACT = 10,
     SEARCH_CONTACT = 11,
     ADD_CONTACT = 12,
@@ -169,18 +184,22 @@ export enum ApiType {
     CREATE_ROOM = 32,
     SET_ROOM_ANNOUNCEMENT = 33,
     GET_ROOM_ANNOUNCEMENT = 34,
+    GET_ROOM_QRCODE = 35,
     SEND_MESSAGE = 50,
     SEND_FILE = 51,
     REVOKE_MESSAGE = 52,
     GET_MESSAGE_MEDIA = 53,
     GET_ALL_LABEL = 70,
-    ADD_LABEL = 71,
-    MODIFY_LABEL = 72,
+    CREATE_LABEL = 71,
+    ADD_LABEL = 72,
+    MODIFY_LABEL = 73,
+    DELETE_LABEL = 74,
 }
 
 export enum ResponseType {
     REQUEST_RESPONSE = 0,
     DISCONNECT = 1,
+    INVALID_TOKEN = 2,
     LOGIN_QRCODE = 10,
     QRCODE_SCAN = 11,
     ACCOUNT_LOGIN = 12,
@@ -194,7 +213,13 @@ export enum ResponseType {
     ROOM_MEMBER_MODIFY = 24,
     CONTACT_SEARCH = 25,
     CONTACT_ADD = 26,
+    ROOM_QRCODE = 27,
     MESSAGE_RECEIVE = 30,
     STATUS_NOTIFY = 31,
     MESSAGE_MEDIA_SRC = 32,
+    LABEL_LIST = 40,
+    LABEL_CREATE = 41,
+    LABEL_ADD = 42,
+    LABEL_MODIFY = 43,
+    LABEL_DELETE = 44,
 }

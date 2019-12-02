@@ -18,7 +18,35 @@ export const padplusToken = () => {
   return token
 }
 
-export const PADPLUS_REPLAY_MESSAGE = process.env.PADPRO_REPLAY_MESSAGE === 'true'
+export const INVALID_TOKEN_MESSAGE = `
+
+
+===========================================================================================
+
+      The token is invalid, please use an valid token to access padplus
+
+      你使用的Token是无效的，请使用有效Token
+
+============================================================================================
+
+
+`
+
+export const EXPIRED_TOKEN_MESSAGE = `
+
+
+===========================================================================================
+
+      The token you are using is expired, please renew this token
+
+      你使用的Token已经过期了，如果你想继续使用wechaty-puppet-padplus，请续费你的Token
+
+============================================================================================
+
+
+`
+
+export const PADPLUS_REPLAY_MESSAGE = process.env.PADPLUS_REPLAY_MESSAGE === 'true'
 
 /**
  * GRPC server
@@ -43,7 +71,6 @@ export const AWS_S3 = {
   SECRET_ACCESS_KEY: 'jw7Deo+W8l4FTOL2BXd/VubTJjt1mhm55sRhnsEn',
 }
 
-// TODO: maybe could change <retry> module to <axios-retry> module
 export async function retry<T> (
   retryableFn: (
     retry: (error: Error) => never,

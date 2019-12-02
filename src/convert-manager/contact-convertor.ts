@@ -8,7 +8,7 @@ export const convertFromGrpcContact = (contactPayload: GrpcContactPayload, isSyn
     city             : contactPayload.City,
     contactFlag      : contactPayload.ContactFlag,
     contactType      : Number(contactPayload.ContactType),
-    country          : '', // TODO: need to CHECK
+    country          : '',
     labelLists       : contactPayload.LabelLists,
     nickName         : contactPayload.NickName,
     province         : contactPayload.Province,
@@ -16,8 +16,8 @@ export const convertFromGrpcContact = (contactPayload: GrpcContactPayload, isSyn
     sex              : contactPayload.Sex as ContactGender,
     signature        : contactPayload.Signature,
     smallHeadUrl     : contactPayload.SmallHeadImgUrl,
-    stranger         : isSync ? contactPayload.ContactFlag.toString() : contactPayload.EncryptUsername,
-    ticket           : '', // TODO: need to check
+    stranger         : contactPayload.EncryptUsername,
+    ticket           : '',
     userName         : contactPayload.UserName,
     verifyFlag       : contactPayload.VerifyFlag,
   }

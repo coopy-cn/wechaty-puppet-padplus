@@ -68,7 +68,8 @@ proto.PadPlusServer.RequestObject.toObject = function(includeInstance, msg) {
     requestid: jspb.Message.getField(msg, 10),
     token: jspb.Message.getField(msg, 20),
     apitype: jspb.Message.getField(msg, 30),
-    params: jspb.Message.getField(msg, 40)
+    params: jspb.Message.getField(msg, 40),
+    traceid: jspb.Message.getField(msg, 50)
   };
 
   if (includeInstance) {
@@ -124,6 +125,10 @@ proto.PadPlusServer.RequestObject.deserializeBinaryFromReader = function(msg, re
     case 40:
       var value = /** @type {string} */ (reader.readString());
       msg.setParams(value);
+      break;
+    case 50:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setTraceid(value);
       break;
     default:
       reader.skipField();
@@ -186,6 +191,13 @@ proto.PadPlusServer.RequestObject.serializeBinaryToWriter = function(message, wr
   if (f != null) {
     writer.writeString(
       40,
+      f
+    );
+  }
+  f = /** @type {string} */ (jspb.Message.getField(message, 50));
+  if (f != null) {
+    writer.writeString(
+      50,
       f
     );
   }
@@ -334,6 +346,35 @@ proto.PadPlusServer.RequestObject.prototype.clearParams = function() {
  */
 proto.PadPlusServer.RequestObject.prototype.hasParams = function() {
   return jspb.Message.getField(this, 40) != null;
+};
+
+
+/**
+ * optional string traceId = 50;
+ * @return {string}
+ */
+proto.PadPlusServer.RequestObject.prototype.getTraceid = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 50, ""));
+};
+
+
+/** @param {string} value */
+proto.PadPlusServer.RequestObject.prototype.setTraceid = function(value) {
+  jspb.Message.setField(this, 50, value);
+};
+
+
+proto.PadPlusServer.RequestObject.prototype.clearTraceid = function() {
+  jspb.Message.setField(this, 50, undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {!boolean}
+ */
+proto.PadPlusServer.RequestObject.prototype.hasTraceid = function() {
+  return jspb.Message.getField(this, 50) != null;
 };
 
 
@@ -699,7 +740,8 @@ proto.PadPlusServer.StreamResponse.toObject = function(includeInstance, msg) {
     uin: jspb.Message.getField(msg, 1),
     requestid: jspb.Message.getField(msg, 10),
     data: jspb.Message.getField(msg, 20),
-    responsetype: jspb.Message.getField(msg, 30)
+    responsetype: jspb.Message.getField(msg, 30),
+    traceid: jspb.Message.getField(msg, 40)
   };
 
   if (includeInstance) {
@@ -751,6 +793,10 @@ proto.PadPlusServer.StreamResponse.deserializeBinaryFromReader = function(msg, r
     case 30:
       var value = /** @type {!proto.PadPlusServer.ResponseType} */ (reader.readEnum());
       msg.setResponsetype(value);
+      break;
+    case 40:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setTraceid(value);
       break;
     default:
       reader.skipField();
@@ -806,6 +852,13 @@ proto.PadPlusServer.StreamResponse.serializeBinaryToWriter = function(message, w
   if (f != null) {
     writer.writeEnum(
       30,
+      f
+    );
+  }
+  f = /** @type {string} */ (jspb.Message.getField(message, 40));
+  if (f != null) {
+    writer.writeString(
+      40,
       f
     );
   }
@@ -929,6 +982,35 @@ proto.PadPlusServer.StreamResponse.prototype.hasResponsetype = function() {
 
 
 /**
+ * optional string traceId = 40;
+ * @return {string}
+ */
+proto.PadPlusServer.StreamResponse.prototype.getTraceid = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 40, ""));
+};
+
+
+/** @param {string} value */
+proto.PadPlusServer.StreamResponse.prototype.setTraceid = function(value) {
+  jspb.Message.setField(this, 40, value);
+};
+
+
+proto.PadPlusServer.StreamResponse.prototype.clearTraceid = function() {
+  jspb.Message.setField(this, 40, undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {!boolean}
+ */
+proto.PadPlusServer.StreamResponse.prototype.hasTraceid = function() {
+  return jspb.Message.getField(this, 40) != null;
+};
+
+
+/**
  * @enum {number}
  */
 proto.PadPlusServer.ApiType = {
@@ -938,6 +1020,7 @@ proto.PadPlusServer.ApiType = {
   INIT: 3,
   STOP: 4,
   CLOSE: 5,
+  HEARTBEAT: 6,
   GET_CONTACT: 10,
   SEARCH_CONTACT: 11,
   ADD_CONTACT: 12,
@@ -950,13 +1033,16 @@ proto.PadPlusServer.ApiType = {
   CREATE_ROOM: 32,
   SET_ROOM_ANNOUNCEMENT: 33,
   GET_ROOM_ANNOUNCEMENT: 34,
+  GET_ROOM_QRCODE: 35,
   SEND_MESSAGE: 50,
   SEND_FILE: 51,
   REVOKE_MESSAGE: 52,
   GET_MESSAGE_MEDIA: 53,
   GET_ALL_LABEL: 70,
-  ADD_LABEL: 71,
-  MODIFY_LABEL: 72
+  CREATE_LABEL: 71,
+  ADD_LABEL: 72,
+  MODIFY_LABEL: 73,
+  DELETE_LABEL: 74
 };
 
 /**
@@ -965,6 +1051,7 @@ proto.PadPlusServer.ApiType = {
 proto.PadPlusServer.ResponseType = {
   REQUEST_RESPONSE: 0,
   DISCONNECT: 1,
+  INVALID_TOKEN: 2,
   LOGIN_QRCODE: 10,
   QRCODE_SCAN: 11,
   ACCOUNT_LOGIN: 12,
@@ -978,9 +1065,15 @@ proto.PadPlusServer.ResponseType = {
   ROOM_MEMBER_MODIFY: 24,
   CONTACT_SEARCH: 25,
   CONTACT_ADD: 26,
+  ROOM_QRCODE: 27,
   MESSAGE_RECEIVE: 30,
   STATUS_NOTIFY: 31,
-  MESSAGE_MEDIA_SRC: 32
+  MESSAGE_MEDIA_SRC: 32,
+  LABEL_LIST: 40,
+  LABEL_CREATE: 41,
+  LABEL_ADD: 42,
+  LABEL_MODIFY: 43,
+  LABEL_DELETE: 44
 };
 
 goog.object.extend(exports, proto.PadPlusServer);

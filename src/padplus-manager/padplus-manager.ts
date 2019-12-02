@@ -3,7 +3,7 @@ import {
   DelayQueueExecutor, ThrottleQueue,
 }                             from 'rx-queue'
 import { StateSwitch }        from 'state-switch'
-import { log, GRPC_ENDPOINT, MESSAGE_CACHE_MAX, MESSAGE_CACHE_AGE, WAIT_FOR_READY_TIME } from '../config'
+import { log, GRPC_ENDPOINT, MESSAGE_CACHE_MAX, MESSAGE_CACHE_AGE, WAIT_FOR_READY_TIME, INVALID_TOKEN_MESSAGE, EXPIRED_TOKEN_MESSAGE } from '../config'
 import { MemoryCard } from 'memory-card'
 import FileBox from 'file-box'
 import LRU from 'lru-cache'
@@ -11,7 +11,7 @@ import fileBoxToQrcode from '../utils/file-box-to-qrcode'
 
 import { GrpcGateway } from '../server-manager/grpc-gateway'
 import { StreamResponse, ResponseType } from '../server-manager/proto-ts/PadPlusServer_pb'
-import { ScanStatus, ContactGender, FriendshipPayload as PuppetFriendshipPayload } from 'wechaty-puppet'
+import { ScanStatus, ContactGender, FriendshipPayload as PuppetFriendshipPayload, TagPayload } from 'wechaty-puppet'
 import { RequestClient } from './api-request/request'
 import { PadplusUser } from './api-request/user'
 import { PadplusContact } from './api-request/contact'
@@ -48,8 +48,9 @@ import { convertRoomFromGrpc } from '../convert-manager/room-convertor'
 import { CallbackPool } from '../utils/callbackHelper'
 import { PadplusFriendship } from './api-request/friendship'
 import { briefRoomMemberParser, roomMemberParser } from '../pure-function-helpers/room-member-parser'
-import { isRoomId, isStrangerV1, isContactId } from '../pure-function-helpers'
+import { isRoomId, isContactId } from '../pure-function-helpers'
 import { EventEmitter } from 'events'
+import { LabelRawPayload } from '../schemas/model-tag'
 
 const MEMORY_SLOT_NAME = 'WECHATY_PUPPET_PADPLUS'
 
@@ -67,14 +68,12 @@ export interface ManagerOptions {
 
 const PRE = 'PadplusManager'
 
-export type PadplusManagerEvent = 'error' | 'scan' | 'login' | 'logout' | 'contact-list' | 'contact-modify' | 'contact-delete' | 'message' | 'room-member-list' | 'room-member-modify' | 'status-notify' | 'ready' | 'reset'
+export type PadplusManagerEvent = 'error' | 'scan' | 'login' | 'logout' | 'contact-list' | 'contact-modify' | 'contact-delete' | 'message' | 'room-member-list' | 'room-member-modify' | 'status-notify' | 'ready' | 'reset' | 'heartbeat' | 'EXPIRED_TOKEN' | 'INVALID_TOKEN'
 
 export class PadplusManager extends EventEmitter {
 
   private grpcGatewayEmitter?: GrpcEventEmitter
-  // private grpcGateway        : GrpcGateway
   private readonly state     : StateSwitch
-  private syncQueueExecutor  : DelayQueueExecutor
   private requestClient?     : RequestClient
   private padplusUser?       : PadplusUser
   private padplusMesasge?    : PadplusMessage
@@ -95,7 +94,8 @@ export class PadplusManager extends EventEmitter {
     readyEmitted: boolean,
   }
   private resetThrottleQueue    : ThrottleQueue
-
+  private getContactQueue       : DelayQueueExecutor
+  private getRoomMemberQueue    : DelayQueueExecutor
   constructor (
     public options: ManagerOptions,
   ) {
@@ -120,8 +120,8 @@ export class PadplusManager extends EventEmitter {
       userName: '',
     }
 
-    this.syncQueueExecutor = new DelayQueueExecutor(1000)
-
+    this.getContactQueue = new DelayQueueExecutor(200)
+    this.getRoomMemberQueue = new DelayQueueExecutor(500)
     this.resetThrottleQueue = new ThrottleQueue<string>(5000)
     this.resetThrottleQueue.subscribe(async reason => {
       log.silly('Puppet', 'constructor() resetThrottleQueue.subscribe() reason: %s', reason)
@@ -138,7 +138,7 @@ export class PadplusManager extends EventEmitter {
 
       await this.start()
     })
-    log.silly(PRE, ` : ${util.inspect(this.state)}, ${this.syncQueueExecutor}`)
+    log.silly(PRE, ` : ${util.inspect(this.state)}`)
   }
 
   public emit (event: 'scan', qrcode: string, status: number, data?: string): boolean
@@ -153,6 +153,7 @@ export class PadplusManager extends EventEmitter {
   public emit (event: 'status-notify', data: string): boolean
   public emit (event: 'ready'): boolean
   public emit (event: 'reset', reason: string): boolean
+  public emit (event: 'heartbeat', data: string): boolean
   public emit (event: 'error', error: Error): boolean
   public emit (event: never, listener: never): never
 
@@ -170,6 +171,7 @@ export class PadplusManager extends EventEmitter {
   public on (event: 'status-notify', listener: ((this: PadplusManager, data: string) => void)): this
   public on (event: 'ready', listener: ((this: PadplusManager) => void)): this
   public on (event: 'reset', listener: ((this: PadplusManager, reason: string) => void)): this
+  public on (event: 'heartbeat', listener: ((this: PadplusManager, data: string) => void)): this
   public on (event: 'error', listener: ((this: PadplusManager, error: Error) => void)): this
   public on (event: never, listener: never): never
 
@@ -211,7 +213,6 @@ export class PadplusManager extends EventEmitter {
     this.padplusRoom = new PadplusRoom(this.requestClient)
     this.padplusFriendship = new PadplusFriendship(this.requestClient)
 
-    await this.setContactAndRoomData()
     await this.initGrpcGatewayListener(emitter)
     this.grpcGatewayEmitter = emitter
 
@@ -234,7 +235,7 @@ export class PadplusManager extends EventEmitter {
   }
 
   public async stop (): Promise<void> {
-    log.info(PRE, `stop()`)
+    log.verbose(PRE, `stop()`)
     this.state.off('pending')
 
     if (this.grpcGatewayEmitter) {
@@ -247,11 +248,11 @@ export class PadplusManager extends EventEmitter {
     this.loginStatus = false
 
     this.state.off(true)
-    log.info(PRE, `stop() finished`)
+    log.verbose(PRE, `stop() finished`)
   }
 
   public async logout (): Promise<void> {
-    log.info(PRE, `logout()`)
+    log.verbose(PRE, `logout()`)
     this.state.off('pending')
 
     if (this.grpcGatewayEmitter) {
@@ -266,7 +267,7 @@ export class PadplusManager extends EventEmitter {
     this.loginStatus = false
 
     this.state.off(true)
-    log.info(PRE, `logout() finished`)
+    log.verbose(PRE, `logout() finished`)
   }
 
   public setMemory (memory: MemoryCard) {
@@ -282,7 +283,7 @@ export class PadplusManager extends EventEmitter {
     const contactTotal = await this.cacheManager.getContactCount()
     const roomTotal = await this.cacheManager.getRoomCount()
     const friendTotal = (await this.cacheManager.getAllContacts()).filter(contact => {
-      isStrangerV1(contact.stranger)
+      return contact.contactFlag !== 0
     }).length
     const now = new Date().getTime()
     if (this.contactAndRoomData) {
@@ -292,7 +293,7 @@ export class PadplusManager extends EventEmitter {
        && this.contactAndRoomData.friendTotal  === friendTotal) {
         if (now - this.contactAndRoomData.updatedTime > WAIT_FOR_READY_TIME
           && !this.contactAndRoomData.readyEmitted) {
-          log.info(PRE, `setContactAndRoomData() more than ${WAIT_FOR_READY_TIME / 1000 / 60} minutes no change on data, emit ready event.`)
+          log.verbose(PRE, `setContactAndRoomData() more than ${WAIT_FOR_READY_TIME / 1000 / 60} minutes no change on data, emit ready event.`)
           this.contactAndRoomData.readyEmitted = true
           this.emit('ready')
         }
@@ -326,6 +327,24 @@ export class PadplusManager extends EventEmitter {
       this.emit('reset', 'grpc server end.')
     })
 
+    grpcGatewayEmitter.on('heartbeat', async (data: any) => {
+      this.emit('heartbeat', data)
+      // TODO: 数据同步后，需要停止该函数的执行
+      if (!this.contactAndRoomData || !this.contactAndRoomData.readyEmitted) {
+        await this.setContactAndRoomData()
+      }
+    })
+
+    grpcGatewayEmitter.on('EXPIRED_TOKEN', async () => {
+      log.info(EXPIRED_TOKEN_MESSAGE)
+      setTimeout(() => process.exit(), 5000)
+    })
+
+    grpcGatewayEmitter.on('INVALID_TOKEN', async () => {
+      log.info(INVALID_TOKEN_MESSAGE)
+      setTimeout(() => process.exit(), 5000)
+    })
+
     grpcGatewayEmitter.on('data', async (data: StreamResponse) => {
       const type = data.getResponsetype()
       switch (type) {
@@ -336,7 +355,7 @@ export class PadplusManager extends EventEmitter {
             const qrcodeData = JSON.parse(qrcodeRawData)
             grpcGatewayEmitter.setQrcodeId(qrcodeData.qrcodeId)
 
-            const fileBox = await FileBox.fromBase64(qrcodeData.qrcode, `qrcode${(Math.random() * 10000).toFixed()}.png`)
+            const fileBox = FileBox.fromBase64(qrcodeData.qrcode, `qrcode${(Math.random() * 10000).toFixed()}.png`)
             const qrcodeUrl = await fileBoxToQrcode(fileBox)
             this.emit('scan', qrcodeUrl, ScanStatus.Cancel)
             this.qrcodeStatus = ScanStatus.Cancel
@@ -377,6 +396,8 @@ export class PadplusManager extends EventEmitter {
                   uin,
                   wxid,
                 }
+                this.emit('scan', '', scanData.status)
+
                 if (this.padplusUser) {
                   await this.padplusUser.getWeChatQRCode(data)
                 }
@@ -417,7 +438,7 @@ export class PadplusManager extends EventEmitter {
             this.cacheManager = CacheManager.Instance
 
             const contactSelf: PadplusContactPayload = {
-              alias: '',
+              alias: loginData.alias,
               bigHeadUrl: loginData.headImgUrl,
               city: '',
               contactFlag: 3,
@@ -459,7 +480,7 @@ export class PadplusManager extends EventEmitter {
                 this.cacheManager = CacheManager.Instance
 
                 const contactSelf: PadplusContactPayload = {
-                  alias: '',
+                  alias: wechatUser.alias,
                   bigHeadUrl: wechatUser.headImgUrl,
                   city: '',
                   contactFlag: 3,
@@ -502,19 +523,27 @@ export class PadplusManager extends EventEmitter {
           const logoutRawData = data.getData()
           if (logoutRawData) {
             const logoutData: GrpcLogout = JSON.parse(logoutRawData)
-            const uin = logoutData.uin
+            const uin = data.getUin()
             const _uin = grpcGatewayEmitter.getUIN()
             if (uin === _uin) {
               this.loginStatus = false
               if (logoutData.mqType === 1100) {
                 this.emit('error', new PadplusError(PadplusErrorType.EXIT, logoutData.message))
-                await new Promise((resolve) => setTimeout(resolve, 10 * 1000))
+                await new Promise((resolve) => setTimeout(resolve, 20 * 1000))
                 this.emit('logout')
               }
             } else {
               const userName = grpcGatewayEmitter.getUserName()
               throw new Error(`can not get userName for this uin : ${uin}, userName: ${userName}`)
             }
+          } else {
+            log.info(`can not get data from Event LOGOUT, ready to restart...`)
+            if (!this.padplusUser) {
+              throw new Error(`no padplusUser`)
+            }
+            await this.padplusUser.reconnect()
+            await new Promise((resolve) => setTimeout(resolve, 30 * 1000))
+            this.emit('reset', 'logout with some unknow reasons')
           }
           break
 
@@ -525,6 +554,9 @@ export class PadplusManager extends EventEmitter {
             const _data = JSON.parse(roomRawData)
             if (!isRoomId(_data.UserName)) {
               const contactData: GrpcContactPayload = _data
+              if (contactData.Type7) {
+                log.warn(`This id: ${contactData.UserName} is not wxid, using weixin instead of wxid will potentially cause system failure. To make sure everything works as excepted, please use the wxid to load Contact.`)
+              }
               const contact = convertFromGrpcContact(contactData, true)
               if (this.cacheManager) {
                 await this.cacheManager.setContact(contact.userName, contact)
@@ -556,8 +588,30 @@ export class PadplusManager extends EventEmitter {
             const deleteUserName = contactData.field
             if (this.cacheManager) {
               if (isRoomId(deleteUserName)) {
-                await this.cacheManager.deleteRoomMember(deleteUserName)
-                await this.cacheManager.deleteRoom(deleteUserName)
+                const room = await this.cacheManager.getRoom(deleteUserName)
+                if (!room) {
+                  const roomPayload: PadplusRoomPayload = {
+                    alias          : '',
+                    bigHeadUrl     : '',
+                    chatRoomOwner  : '',
+                    chatroomId     : deleteUserName,
+                    chatroomVersion: 0,
+                    contactType    : 0,
+                    isDelete       : true,
+                    labelLists     : '',
+                    memberCount    : 0,
+                    members        : [],
+                    nickName       : '',
+                    smallHeadUrl   : '',
+                    stranger       : '',
+                    ticket         : '',
+                  }
+                  await this.cacheManager.setRoom(deleteUserName, roomPayload)
+                } else {
+                  room.isDelete = true
+                  await this.cacheManager.setRoom(deleteUserName, room)
+                }
+                await this.cacheManager.setRoomMember(deleteUserName, {} as { [contactId: string]: PadplusRoomMemberPayload })
               } else if (isContactId(deleteUserName)) {
                 await this.cacheManager.deleteContact(deleteUserName)
               } else {
@@ -580,12 +634,19 @@ export class PadplusManager extends EventEmitter {
           CallbackPool.Instance.removeCallback(data.getRequestid()!)
           break
         case ResponseType.CONTACT_SEARCH :
-          const contactStr = data.getData()
-          if (contactStr) {
-            const contact: GrpcSearchContact = JSON.parse(contactStr)
-            const searchContactCallback = CallbackPool.Instance.getCallback(contact.wxid)
+          const searchContactTraceId = data.getTraceid()
+          if (searchContactTraceId) {
+            const searchContactCallback = CallbackPool.Instance.getCallback(searchContactTraceId)
             searchContactCallback && searchContactCallback(data)
-            CallbackPool.Instance.removeCallback(contact.wxid)
+            CallbackPool.Instance.removeCallback(searchContactTraceId)
+          }
+          break
+        case ResponseType.ROOM_QRCODE:
+          const roomQrcodeTraceId = data.getTraceid()
+          if (roomQrcodeTraceId) {
+            const callback = CallbackPool.Instance.getCallback(roomQrcodeTraceId)
+            callback && callback(data)
+            CallbackPool.Instance.removeCallback(roomQrcodeTraceId)
           }
           break
         case ResponseType.ROOM_MEMBER_LIST :
@@ -604,7 +665,7 @@ export class PadplusManager extends EventEmitter {
                   throw new PadplusError(PadplusErrorType.NO_CACHE, 'roomMemberList')
                 }
                 const contact = await this.cacheManager.getContact(member.UserName)
-                if (!contact || contact.stranger !== '3') {
+                if (!contact) {
                   const newContact: PadplusContactPayload = {
                     alias: '',
                     bigHeadUrl: member.HeadImgUrl,
@@ -615,7 +676,7 @@ export class PadplusManager extends EventEmitter {
                     labelLists: '',
                     nickName: member.NickName,
                     province: '',
-                    remark: member.DisplayName,
+                    remark: '',
                     sex: ContactGender.Unknown,
                     signature: '',
                     smallHeadUrl: member.HeadImgUrl,
@@ -626,25 +687,12 @@ export class PadplusManager extends EventEmitter {
                   }
                   await this.cacheManager.setContact(newContact.userName, newContact)
                 } else {
-                  const newContact: PadplusContactPayload = {
-                    alias: contact.alias,
+                  const newContact: PadplusContactPayload = Object.assign({}, contact, {
                     bigHeadUrl: member.HeadImgUrl,
-                    city: contact.city,
-                    contactFlag: 0,
-                    contactType: 0,
-                    country: contact.country,
-                    labelLists: contact.labelLists,
                     nickName: member.NickName,
-                    province: contact.province,
-                    remark: member.DisplayName,
-                    sex: ContactGender.Unknown,
-                    signature: contact.signature,
                     smallHeadUrl: member.HeadImgUrl,
-                    stranger: contact.stranger,
-                    ticket: contact.ticket,
                     userName: member.UserName,
-                    verifyFlag: 0,
-                  }
+                  })
                   await this.cacheManager.setContact(newContact.userName, newContact)
                 }
                 CallbackPool.Instance.resolveRoomMemberCallback(roomId, members)
@@ -662,20 +710,43 @@ export class PadplusManager extends EventEmitter {
         case ResponseType.STATUS_NOTIFY :
           // TODO: not support now
           break
-        case ResponseType.MESSAGE_MEDIA_SRC :
-          const mediaDataStr = data.getData()
-          if (mediaDataStr) {
-            const mediaData = JSON.parse(mediaDataStr)
-            const callback = await CallbackPool.Instance.getCallback(mediaData.msgId)
+        case ResponseType.LABEL_ADD :
+          const newLabelStr = data.getData()
+          log.silly(`newLabelStr, ${newLabelStr}`)
+          if (newLabelStr) {
+            const data = JSON.parse(newLabelStr)
+            const key = data.labelList[0].LabelName
+            const callback = await CallbackPool.Instance.getCallback(key)
             callback && callback(data)
-            CallbackPool.Instance.removeCallback(mediaData.msgId)
+            CallbackPool.Instance.removeCallback(key)
+          }
+          break
+        case ResponseType.LABEL_LIST :
+          // TODO: need to set tag list info to cacheManager, so we have to create a new cache named cacheTagRawPayload
+          const labelListStr = data.getData()
+          log.silly(`labelListStr, ${labelListStr}`)
+          if (labelListStr) {
+            const data = JSON.parse(labelListStr)
+            const callback = await CallbackPool.Instance.getCallback(data.getUIN())
+            callback && callback(data)
+            CallbackPool.Instance.removeCallback(data.getUIN())
+          }
+          break
+        case ResponseType.MESSAGE_MEDIA_SRC :
+          const traceId = data.getTraceid()
+          if (traceId) {
+            const callback = CallbackPool.Instance.getCallback(traceId)
+            callback && callback(data)
+            CallbackPool.Instance.removeCallback(traceId)
+          } else {
+            log.silly(PRE, `can not get trace id`)
           }
           break
         case ResponseType.REQUEST_RESPONSE :
           const requestId = data.getRequestid()
           const responseData = data.getData()
           if (responseData) {
-            const callback = await CallbackPool.Instance.getCallback(requestId!)
+            const callback = CallbackPool.Instance.getCallback(requestId!)
             callback && callback(data)
           }
           break
@@ -775,6 +846,90 @@ export class PadplusManager extends EventEmitter {
   /**
    * Contact Section
    */
+
+  public async newTag (tag: string): Promise<string> {
+    if (!this.padplusContact) {
+      throw new Error(`no padplusContact`)
+    }
+
+    return this.padplusContact.newTag(tag)
+  }
+
+  public async addTag (tagId: string, contactId: string): Promise<void> {
+    if (!this.padplusContact) {
+      throw new Error(`no padplusContact`)
+    }
+    const tags = await this.tags(contactId)
+    const tagsId = tags.map(tag => tag.id)
+    const allTagsId = tagsId.length === 0 ? tagId : tagsId.join(',') + ',' + tagId
+    await this.padplusContact.addTag(allTagsId, contactId)
+  }
+
+  public async tags (contactId: string): Promise<TagPayload []> {
+    if (!this.cacheManager) {
+      throw new Error(`no cacheManager`)
+    }
+
+    const contact = await this.cacheManager.getContact(contactId)
+    if (!contact) {
+      throw new Error(`can not get contact by this contactId: ${contactId}`)
+    }
+    const labelsId = contact.labelLists
+    const labelIdsList = labelsId.split(',')
+
+    const allLabel: TagPayload[] = await this.tagList()
+
+    const tags: TagPayload[] = []
+    await Promise.all(labelIdsList.map((id: string) => {
+      allLabel.map(label => {
+        if (label && id === label.id.toString()) {
+          tags.push(label)
+        }
+      })
+    }))
+    return tags
+  }
+
+  public async tagList (): Promise<TagPayload []> {
+    if (!this.padplusContact) {
+      throw new Error(`no padplusContact`)
+    }
+
+    const labelList: LabelRawPayload[] = await this.padplusContact.tagList()
+    let tagList: TagPayload[] = []
+
+    if (labelList && labelList.length === 0) {
+      return []
+    }
+
+    labelList.map(label => {
+      const tag: TagPayload = {
+        id: label.LabelID,
+        name: label.LabelName,
+      }
+      tagList.push(tag)
+    })
+    return tagList
+  }
+
+  public async modifyTag (tagId: string, name: string): Promise<void> {
+    log.silly(PRE, `modifyTag(${tagId}, ${name})`)
+    if (!this.padplusContact) {
+      throw new Error(`no padplusContact`)
+    }
+
+    await this.padplusContact.modifyTag(tagId, name)
+  }
+
+  public async deleteTag (tagId: string): Promise<void> {
+    log.silly(PRE, `deleteTag(${tagId})`)
+    if (!this.padplusContact) {
+      throw new Error(`no padplusContact`)
+    }
+
+    await this.padplusContact.deleteTag(tagId)
+  }
+
   public async setContactAlias (
     contactId: string,
     alias: string,
@@ -817,10 +972,13 @@ export class PadplusManager extends EventEmitter {
     if (contact) {
       return contact
     }
-    if (!this.padplusContact) {
-      throw new Error(`no padplusContact`)
-    }
-    await this.padplusContact.getContactInfo(contactId)
+
+    await this.getContactQueue.execute(async () => {
+      if (!this.padplusContact) {
+        throw new Error(`no padplusContact`)
+      }
+      await this.padplusContact.getContactInfo(contactId)
+    })
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error('get contact timeout')), 5000)
@@ -890,6 +1048,14 @@ export class PadplusManager extends EventEmitter {
     })
   }
 
+  public async getRoomQrcode (roomId: string): Promise<string> {
+    if (!this.padplusRoom) {
+      throw new Error(`no padplusRoom`)
+    }
+    const qrcodeBuf = this.padplusRoom.getRoomQrcode(roomId)
+    return qrcodeBuf
+  }
+
   public async getRoomIdList ():Promise<string[]> {
     if (!this.cacheManager) {
       throw new Error(`no cache.`)
@@ -900,29 +1066,8 @@ export class PadplusManager extends EventEmitter {
   public async getRoomMemberIdList (
     roomId: string,
   ) {
-    if (!this.cacheManager) {
-      throw new Error(`no cache.`)
-    }
-    let memberMap = await this.cacheManager.getRoomMember(roomId)
-    if (!memberMap) {
-      const room = await this.getRoomInfo(roomId)
-      await Promise.all(
-        room.members.map(m => {
-          const _member: PadplusRoomMemberPayload = {
-            bigHeadUrl: '',
-            contactId: m.UserName,
-            displayName: '',
-            inviterId: '',
-            nickName: m.NickName || '',
-            smallHeadUrl: '',
-          }
-          if (!memberMap) {
-            memberMap = {}
-          }
-          memberMap[m.UserName] = _member
-        })
-      )
-    }
+    const memberMap = await this.getRoomMembers(roomId)
+
     if (memberMap) {
       return Object.keys(memberMap)
     } else {
@@ -951,10 +1096,12 @@ export class PadplusManager extends EventEmitter {
     if (room) {
       return room
     }
-    if (!this.padplusContact) {
-      throw new Error(`no padplusContact`)
-    }
-    await this.padplusContact.getContactInfo(roomId)
+    await this.getContactQueue.execute(async () => {
+      if (!this.padplusContact) {
+        throw new Error(`no padplusContact`)
+      }
+      await this.padplusContact.getContactInfo(roomId)
+    })
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error('get room timeout')), 5000)
       CallbackPool.Instance.pushContactCallback(roomId, (data) => {
@@ -962,12 +1109,11 @@ export class PadplusManager extends EventEmitter {
         resolve(data as PadplusRoomPayload)
       })
     })
-    // return null
   }
 
   public async getRoomMembers (
     roomId: string,
-  ) {
+  ): Promise<PadplusRoomMemberMap> {
     if (!this.cacheManager) {
       throw new Error(`no cache.`)
     }
@@ -977,12 +1123,13 @@ export class PadplusManager extends EventEmitter {
         throw new Error(`no grpcGatewayEmitter.`)
       }
       const uin = this.grpcGatewayEmitter.getUIN()
-      if (!this.padplusRoom) {
-        throw new Error(`no padplus Room.`)
-      }
-      await this.padplusRoom.getRoomMembers(uin, roomId)
-
-      const memberMap = await new Promise<PadplusRoomMemberMap>((resolve, reject) => {
+      await this.getRoomMemberQueue.execute(async () => {
+        if (!this.padplusRoom) {
+          throw new Error(`no padplus Room.`)
+        }
+        await this.padplusRoom.getRoomMembers(uin, roomId)
+      })
+      return new Promise<PadplusRoomMemberMap>((resolve, reject) => {
         const timeout = setTimeout(() => {
           reject(new Error('get room member failed since timeout'))
         }, 5000)
@@ -991,9 +1138,9 @@ export class PadplusManager extends EventEmitter {
           resolve(data)
         })
       })
+    } else {
       return memberMap
     }
-    return memberMap
   }
 
   public async deleteRoomMember (roomId: string, contactId: string): Promise<void> {
@@ -1011,7 +1158,7 @@ export class PadplusManager extends EventEmitter {
     if (!this.padplusRoom) {
       throw new Error(`no padplus Room.`)
     }
-    await this.padplusRoom.setAnnouncement(roomId, announcement)
+    return this.padplusRoom.setAnnouncement(roomId, announcement)
   }
 
   public async getAnnouncement (
@@ -1027,7 +1174,7 @@ export class PadplusManager extends EventEmitter {
     roomId: string,
     memberId: string,
   ) {
-    log.silly(PRE, `roomAddMember : ${util.inspect(roomId)};${memberId}`)
+    log.silly(PRE, `roomAddMember: ${roomId}, ${memberId}`)
     if (!this.padplusRoom) {
       throw new Error(`no padplus Room.`)
     }
@@ -1102,7 +1249,7 @@ export class PadplusManager extends EventEmitter {
     await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('accept friend request timeout.'))
-      }, 5000)
+      }, 60 * 1000)
       CallbackPool.Instance.pushAcceptFriendCallback(contactId, () => {
         clearTimeout(timeout)
         resolve()
