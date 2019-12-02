@@ -9,7 +9,7 @@ export const convertFromGrpcContact = (contactPayload: GrpcContactPayload, isSyn
     contactFlag      : contactPayload.ContactFlag,
     contactType      : Number(contactPayload.ContactType),
     country          : '',
-    labelLists       : contactPayload.LabelLists,
+    tagList       : contactPayload.LabelLists,
     nickName         : contactPayload.NickName,
     province         : contactPayload.Province,
     remark           : contactPayload.RemarkName,

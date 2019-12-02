@@ -9,7 +9,7 @@ export const convertRoomFromGrpc = (room: GrpcRoomPayload): PadplusRoomPayload =
     chatroomId     : room.UserName,
     chatroomVersion: room.ChatroomVersion,
     contactType    : room.ContactType,
-    labelLists     : room.LabelLists,
+    tagList     : room.LabelLists,
     memberCount    : JSON.parse(room.ExtInfo).length,
     members        : JSON.parse(room.ExtInfo),
     nickName       : room.NickName,

@@ -5,7 +5,7 @@ export interface TagGrpcPayload {
 
 export interface TagNewOrListGrpcResponse {
   count: number,
-  labelList: TagGrpcPayload[],
+  tagList: TagGrpcPayload[],
   loginer: string,
   message: string,
   queueName: string,

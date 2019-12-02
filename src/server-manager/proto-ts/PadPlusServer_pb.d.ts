@@ -189,11 +189,11 @@ export enum ApiType {
     SEND_FILE = 51,
     REVOKE_MESSAGE = 52,
     GET_MESSAGE_MEDIA = 53,
-    GET_ALL_LABEL = 70,
-    CREATE_LABEL = 71,
-    ADD_LABEL = 72,
-    MODIFY_LABEL = 73,
-    DELETE_LABEL = 74,
+    GET_ALL_TAG = 70,
+    CREATE_TAG = 71,
+    ADD_TAG = 72,
+    MODIFY_TAG = 73,
+    DELETE_TAG = 74,
 }
 
 export enum ResponseType {
@@ -217,9 +217,9 @@ export enum ResponseType {
     MESSAGE_RECEIVE = 30,
     STATUS_NOTIFY = 31,
     MESSAGE_MEDIA_SRC = 32,
-    LABEL_LIST = 40,
-    LABEL_CREATE = 41,
-    LABEL_ADD = 42,
-    LABEL_MODIFY = 43,
-    LABEL_DELETE = 44,
+    TAG_LIST = 40,
+    TAG_CREATE = 41,
+    TAG_ADD = 42,
+    TAG_MODIFY = 43,
+    TAG_DELETE = 44,
 }

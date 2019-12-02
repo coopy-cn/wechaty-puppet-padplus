@@ -445,7 +445,7 @@ export class PadplusManager extends EventEmitter {
               contactFlag: 3,
               contactType: 0,
               country: '',
-              labelLists: '',
+              tagList: '',
               nickName: loginData.nickName,
               province: '',
               remark: '',
@@ -487,7 +487,7 @@ export class PadplusManager extends EventEmitter {
                   contactFlag: 3,
                   contactType: 0,
                   country: '',
-                  labelLists: '',
+                  tagList: '',
                   nickName: wechatUser.nickName,
                   province: '',
                   remark: '',
@@ -599,7 +599,7 @@ export class PadplusManager extends EventEmitter {
                     chatroomVersion: 0,
                     contactType    : 0,
                     isDelete       : true,
-                    labelLists     : '',
+                    tagList     : '',
                     memberCount    : 0,
                     members        : [],
                     nickName       : '',
@@ -674,7 +674,7 @@ export class PadplusManager extends EventEmitter {
                     contactFlag: 0,
                     contactType: 0,
                     country: '',
-                    labelLists: '',
+                    tagList: '',
                     nickName: member.NickName,
                     province: '',
                     remark: '',
@@ -853,16 +853,16 @@ export class PadplusManager extends EventEmitter {
     if (!contact) {
       throw new Error(`can not get contact by this contactId: ${contactId}`)
     }
-    const labelsId = contact.labelLists
-    const labelIdsList = labelsId.split(',')
+    const contactTagList = contact.tagList
+    const contactTagIdList = contactTagList.split(',')
 
-    const allLabel: TagPayload[] = await this.tagList()
+    const tagList: TagPayload[] = await this.tagList()
 
     const tags: TagPayload[] = []
-    await Promise.all(labelIdsList.map((id: string) => {
-      allLabel.map(label => {
-        if (label && id === label.id.toString()) {
-          tags.push(label)
+    await Promise.all(contactTagIdList.map((id: string) => {
+      tagList.map(tag => {
+        if (tag && id === tag.id.toString()) {
+          tags.push(tag)
         }
       })
     }))
@@ -881,10 +881,10 @@ export class PadplusManager extends EventEmitter {
       return []
     }
 
-    tagGrpcList.map(label => {
+    tagGrpcList.map(t => {
       const tag: TagPayload = {
-        id: label.LabelID,
-        name: label.LabelName,
+        id: t.LabelID,
+        name: t.LabelName,
       }
       tagList.push(tag)
     })

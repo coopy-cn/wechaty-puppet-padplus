@@ -35,11 +35,11 @@ const NEED_CALLBACK_API_LIST: ApiType[] = [
   ApiType.GET_ROOM_ANNOUNCEMENT,
   ApiType.SET_ROOM_ANNOUNCEMENT,
   ApiType.HEARTBEAT,
-  ApiType.CREATE_LABEL,
-  ApiType.ADD_LABEL,
-  ApiType.MODIFY_LABEL,
-  ApiType.DELETE_LABEL,
-  ApiType.GET_ALL_LABEL,
+  ApiType.CREATE_TAG,
+  ApiType.ADD_TAG,
+  ApiType.MODIFY_TAG,
+  ApiType.DELETE_TAG,
+  ApiType.GET_ALL_TAG,
   ApiType.GET_ROOM_QRCODE,
 ]
 

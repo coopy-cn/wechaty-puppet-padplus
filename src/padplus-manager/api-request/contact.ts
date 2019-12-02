@@ -24,7 +24,7 @@ export class PadplusContact {
       tag,
     }
     const result = await this.requestClient.request({
-      apiType: ApiType.CREATE_LABEL,
+      apiType: ApiType.CREATE_TAG,
       data,
     })
     if (result) {
@@ -32,9 +32,9 @@ export class PadplusContact {
       if (tagGrpcResponseStr) {
         const tagListGrpcResponse: TagNewOrListGrpcResponse = JSON.parse(tagGrpcResponseStr)
         let tagIDs = ''
-        if (tagListGrpcResponse.labelList && tagListGrpcResponse.labelList.length > 0) {
-          await Promise.all(tagListGrpcResponse.labelList.map((tagItem: TagGrpcPayload, index: number) => {
-            if (index === tagListGrpcResponse.labelList.length - 1) {
+        if (tagListGrpcResponse.tagList && tagListGrpcResponse.tagList.length > 0) {
+          await Promise.all(tagListGrpcResponse.tagList.map((tagItem: TagGrpcPayload, index: number) => {
+            if (index === tagListGrpcResponse.tagList.length - 1) {
               tagIDs += tagItem.LabelID
             } else {
               tagIDs += tagItem.LabelID + ','
@@ -54,14 +54,14 @@ export class PadplusContact {
     log.verbose(PRE, `tagList()`)
 
     const result = await this.requestClient.request({
-      apiType: ApiType.GET_ALL_LABEL,
+      apiType: ApiType.GET_ALL_TAG,
     })
     if (result) {
       const tagGrpcResponseStr = result.getData()
       if (tagGrpcResponseStr) {
         const tagListGrpcResponse: TagNewOrListGrpcResponse = JSON.parse(tagGrpcResponseStr)
 
-        return tagListGrpcResponse.labelList
+        return tagListGrpcResponse.tagList
       } else {
         throw new Error(`tagList can not parse data`)
       }
@@ -78,7 +78,7 @@ export class PadplusContact {
       userName: contactId,
     }
     const result = await this.requestClient.request({
-      apiType: ApiType.ADD_LABEL,
+      apiType: ApiType.ADD_TAG,
       data,
     })
 
@@ -105,7 +105,7 @@ export class PadplusContact {
       labelName: name,
     }
     const result = await this.requestClient.request({
-      apiType: ApiType.MODIFY_LABEL,
+      apiType: ApiType.MODIFY_TAG,
       data,
     })
 
@@ -131,7 +131,7 @@ export class PadplusContact {
       labelIds: tagId,
     }
     const result = await this.requestClient.request({
-      apiType: ApiType.DELETE_LABEL,
+      apiType: ApiType.DELETE_TAG,
       data,
     })
 
