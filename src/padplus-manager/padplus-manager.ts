@@ -38,7 +38,7 @@ import {
   GrpcDeleteContact,
   GrpcLogout,
   PadplusRoomMemberMap,
-  LabelRawPayload,
+  TagGrpcPayload,
   GrpcMessagePayload,
   GrpcQrCodeLogin,
 } from '../schemas'
@@ -826,12 +826,12 @@ export class PadplusManager extends EventEmitter {
    * Contact Section
    */
 
-  public async newTag (tag: string): Promise<string> {
+  public async getOrCreateTag (tag: string): Promise<string> {
     if (!this.padplusContact) {
       throw new Error(`no padplusContact`)
     }
 
-    return this.padplusContact.newTag(tag)
+    return this.padplusContact.getOrCreateTag(tag)
   }
 
   public async addTag (tagId: string, contactId: string): Promise<void> {
@@ -874,14 +874,14 @@ export class PadplusManager extends EventEmitter {
       throw new Error(`no padplusContact`)
     }
 
-    const labelList: LabelRawPayload[] = await this.padplusContact.tagList()
+    const tagGrpcList: TagGrpcPayload[] = await this.padplusContact.tagList()
     let tagList: TagPayload[] = []
 
-    if (labelList && labelList.length === 0) {
+    if (tagGrpcList && tagGrpcList.length === 0) {
       return []
     }
 
-    labelList.map(label => {
+    tagGrpcList.map(label => {
       const tag: TagPayload = {
         id: label.LabelID,
         name: label.LabelName,

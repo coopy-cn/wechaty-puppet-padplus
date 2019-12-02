@@ -201,7 +201,7 @@ export class PuppetPadplus extends Puppet {
     if (!this.manager) {
       throw new Error(`no manager`)
     }
-    const tagId = await this.manager.newTag(tag)
+    const tagId = await this.manager.getOrCreateTag(tag)
     const tagPayload: TagPayload = {
       id: tagId,
       name: tag,
