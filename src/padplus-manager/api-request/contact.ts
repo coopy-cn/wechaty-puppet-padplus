@@ -4,9 +4,10 @@ import { ApiType } from '../../server-manager/proto-ts/PadPlusServer_pb'
 import {
   GrpcSearchContact,
   TagGrpcPayload,
-  TagNewOrListGrpcResponse,
   TagOtherOperationsGrpcResponse,
+  TagNewOrListResponse,
 } from '../../schemas'
+import { convertTagStr } from '../../convert-manager/contact-convertor'
 
 const PRE = 'PadplusContact'
 
@@ -30,7 +31,7 @@ export class PadplusContact {
     if (result) {
       const tagGrpcResponseStr = result.getData()
       if (tagGrpcResponseStr) {
-        const tagListGrpcResponse: TagNewOrListGrpcResponse = JSON.parse(tagGrpcResponseStr)
+        const tagListGrpcResponse: TagNewOrListResponse = convertTagStr(tagGrpcResponseStr)
         let tagIDs = ''
         if (tagListGrpcResponse.tagList && tagListGrpcResponse.tagList.length > 0) {
           await Promise.all(tagListGrpcResponse.tagList.map((tagItem: TagGrpcPayload, index: number) => {
@@ -59,7 +60,7 @@ export class PadplusContact {
     if (result) {
       const tagGrpcResponseStr = result.getData()
       if (tagGrpcResponseStr) {
-        const tagListGrpcResponse: TagNewOrListGrpcResponse = JSON.parse(tagGrpcResponseStr)
+        const tagListGrpcResponse: TagNewOrListResponse = convertTagStr(tagGrpcResponseStr)
 
         return tagListGrpcResponse.tagList
       } else {

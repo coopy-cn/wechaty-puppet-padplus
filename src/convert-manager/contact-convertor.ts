@@ -1,5 +1,5 @@
 import { ContactGender } from 'wechaty-puppet'
-import { PadplusContactPayload, GrpcContactPayload } from '../schemas'
+import { PadplusContactPayload, GrpcContactPayload, TagNewOrListResponse, TagNewOrListGrpcResponse } from '../schemas'
 
 export const convertFromGrpcContact = (contactPayload: GrpcContactPayload, isSync?: boolean): PadplusContactPayload => {
   const payload: PadplusContactPayload = {
@@ -22,4 +22,18 @@ export const convertFromGrpcContact = (contactPayload: GrpcContactPayload, isSyn
     verifyFlag       : contactPayload.VerifyFlag,
   }
   return payload
+}
+
+export const convertTagStr = (str: string): TagNewOrListResponse => {
+  const tag: TagNewOrListGrpcResponse = JSON.parse(str)
+  const _tag: TagNewOrListResponse = {
+    count: tag.count,
+    tagList: tag.labelList,
+    loginer: tag.loginer,
+    message: tag.message,
+    queueName: tag.queueName,
+    status: tag.status,
+    uin: tag.uin,
+  }
+  return _tag
 }
