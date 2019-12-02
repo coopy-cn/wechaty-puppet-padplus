@@ -5,20 +5,21 @@ import flatten from 'array-flatten'
 
 import {
   ContactPayload,
-  MessagePayload,
-  Receiver,
   FriendshipPayload,
+  FriendshipPayloadReceive,
+  FriendshipType,
+  MessagePayload,
+  MessageType,
+  MiniProgramPayload,
+  Puppet,
+  PuppetOptions,
+  Receiver,
+  RoomInvitationPayload,
   RoomMemberPayload,
   RoomPayload,
-  UrlLinkPayload,
-  MiniProgramPayload,
-  PuppetOptions,
   ScanStatus,
-  Puppet,
-  RoomInvitationPayload,
-  FriendshipType,
-  FriendshipPayloadReceive,
-  MessageType,
+  TagPayload,
+  UrlLinkPayload,
 }                           from 'wechaty-puppet'
 
 import {
@@ -191,9 +192,74 @@ export class PuppetPadplus extends Puppet {
 
   /**
    * ========================
+   *     TAG SECTION
+   * ========================
+   */
+  public async getOrCreateTag (tag: string): Promise<TagPayload> {
+    log.verbose(PRE, `getOrCreateTag(), tag: ${tag}`)
+
+    if (!this.manager) {
+      throw new Error(`no manager`)
+    }
+    const tagId = await this.manager.newTag(tag)
+    const tagPayload: TagPayload = {
+      id: tagId,
+      name: tag,
+    }
+    return tagPayload
+  }
+
+  public async addTag (tagId: string, contactId: string): Promise<void> {
+    log.verbose(PRE, `addTag(${tagId}, ${contactId})`)
+
+    if (!this.manager) {
+      throw new Error(`no manager`)
+    }
+    return this.manager.addTag(tagId, contactId)
+  }
+
+  public async allTags (): Promise<TagPayload []> {
+    log.verbose(PRE, `tagList()`)
+
+    if (!this.manager) {
+      throw new Error(`no manager`)
+    }
+    return this.manager.tagList()
+  }
+
+  public async modifyTag (tagId: string, name: string): Promise<void> {
+    log.verbose(PRE, `modifyTag(${tagId}, ${name})`)
+
+    if (!this.manager) {
+      throw new Error(`no manager`)
+    }
+    await this.manager.modifyTag(tagId, name)
+  }
+
+  public async deleteTag (tagId: string): Promise<void> {
+    log.verbose(PRE, `deleteTag(${tagId})`)
+
+    if (!this.manager) {
+      throw new Error(`no manager`)
+    }
+    await this.manager.deleteTag(tagId)
+  }
+
+  /**
+   * ========================
    *     CONTACT SECTION
    * ========================
    */
+
+  public async contactTagIdList (contactId: string): Promise<string []> {
+    log.verbose(PRE, `contactTags(), contactId: ${contactId}`)
+
+    if (!this.manager) {
+      throw new Error(`no manager`)
+    }
+    const tags = await this.manager.tags(contactId)
+    return tags.map(tag => tag.id)
+  }
 
   contactSelfQrcode (): Promise<string> {
     throw new Error('Method not implemented.')

@@ -11,7 +11,7 @@ import fileBoxToQrcode from '../utils/file-box-to-qrcode'
 
 import { GrpcGateway } from '../server-manager/grpc-gateway'
 import { StreamResponse, ResponseType } from '../server-manager/proto-ts/PadPlusServer_pb'
-import { ScanStatus, ContactGender, FriendshipPayload as PuppetFriendshipPayload } from 'wechaty-puppet'
+import { ScanStatus, ContactGender, FriendshipPayload as PuppetFriendshipPayload, TagPayload } from 'wechaty-puppet'
 import { RequestClient } from './api-request/request'
 import { PadplusUser } from './api-request/user'
 import { PadplusContact } from './api-request/contact'
@@ -38,9 +38,11 @@ import {
   GrpcDeleteContact,
   GrpcLogout,
   PadplusRoomMemberMap,
+  LabelRawPayload,
+  GrpcMessagePayload,
+  GrpcQrCodeLogin,
 } from '../schemas'
 import { convertMessageFromGrpcToPadplus } from '../convert-manager/message-convertor'
-import { GrpcMessagePayload, GrpcQrCodeLogin } from '../schemas/grpc-schemas'
 import { CacheManager } from '../server-manager/cache-manager'
 import { convertFromGrpcContact } from '../convert-manager/contact-convertor'
 import { PadplusRoom } from './api-request/room'
@@ -823,6 +825,90 @@ export class PadplusManager extends EventEmitter {
   /**
    * Contact Section
    */
+
+  public async newTag (tag: string): Promise<string> {
+    if (!this.padplusContact) {
+      throw new Error(`no padplusContact`)
+    }
+
+    return this.padplusContact.newTag(tag)
+  }
+
+  public async addTag (tagId: string, contactId: string): Promise<void> {
+    if (!this.padplusContact) {
+      throw new Error(`no padplusContact`)
+    }
+    const tags = await this.tags(contactId)
+    const tagsId = tags.map(tag => tag.id)
+    const allTagsId = tagsId.length === 0 ? tagId : tagsId.join(',') + ',' + tagId
+    await this.padplusContact.addTag(allTagsId, contactId)
+  }
+
+  public async tags (contactId: string): Promise<TagPayload []> {
+    if (!this.cacheManager) {
+      throw new Error(`no cacheManager`)
+    }
+
+    const contact = await this.cacheManager.getContact(contactId)
+    if (!contact) {
+      throw new Error(`can not get contact by this contactId: ${contactId}`)
+    }
+    const labelsId = contact.labelLists
+    const labelIdsList = labelsId.split(',')
+
+    const allLabel: TagPayload[] = await this.tagList()
+
+    const tags: TagPayload[] = []
+    await Promise.all(labelIdsList.map((id: string) => {
+      allLabel.map(label => {
+        if (label && id === label.id.toString()) {
+          tags.push(label)
+        }
+      })
+    }))
+    return tags
+  }
+
+  public async tagList (): Promise<TagPayload []> {
+    if (!this.padplusContact) {
+      throw new Error(`no padplusContact`)
+    }
+
+    const labelList: LabelRawPayload[] = await this.padplusContact.tagList()
+    let tagList: TagPayload[] = []
+
+    if (labelList && labelList.length === 0) {
+      return []
+    }
+
+    labelList.map(label => {
+      const tag: TagPayload = {
+        id: label.LabelID,
+        name: label.LabelName,
+      }
+      tagList.push(tag)
+    })
+    return tagList
+  }
+
+  public async modifyTag (tagId: string, name: string): Promise<void> {
+    log.silly(PRE, `modifyTag(${tagId}, ${name})`)
+    if (!this.padplusContact) {
+      throw new Error(`no padplusContact`)
+    }
+
+    await this.padplusContact.modifyTag(tagId, name)
+  }
+
+  public async deleteTag (tagId: string): Promise<void> {
+    log.silly(PRE, `deleteTag(${tagId})`)
+    if (!this.padplusContact) {
+      throw new Error(`no padplusContact`)
+    }
+
+    await this.padplusContact.deleteTag(tagId)
+  }
+
   public async setContactAlias (
     contactId: string,
     alias: string,

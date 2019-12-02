@@ -1039,8 +1039,10 @@ proto.PadPlusServer.ApiType = {
   REVOKE_MESSAGE: 52,
   GET_MESSAGE_MEDIA: 53,
   GET_ALL_LABEL: 70,
-  ADD_LABEL: 71,
-  MODIFY_LABEL: 72
+  CREATE_LABEL: 71,
+  ADD_LABEL: 72,
+  MODIFY_LABEL: 73,
+  DELETE_LABEL: 74
 };
 
 /**
@@ -1066,7 +1068,12 @@ proto.PadPlusServer.ResponseType = {
   ROOM_QRCODE: 27,
   MESSAGE_RECEIVE: 30,
   STATUS_NOTIFY: 31,
-  MESSAGE_MEDIA_SRC: 32
+  MESSAGE_MEDIA_SRC: 32,
+  LABEL_LIST: 40,
+  LABEL_CREATE: 41,
+  LABEL_ADD: 42,
+  LABEL_MODIFY: 43,
+  LABEL_DELETE: 44
 };
 
 goog.object.extend(exports, proto.PadPlusServer);
